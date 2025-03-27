@@ -16,14 +16,13 @@ def ensure_directories_exist():
     os.makedirs("inputs", exist_ok=True)
     print("Ensured that 'segments', 'results', and 'inputs' directories exist")
 
-def load_audio_and_save_segment(transcripts, audio_files, speakers, segment_name="segment"):
+def load_audio_and_save_segment(transcripts, audio_files, segment_name="segment"):
     """
     Load audio files, create segments with transcripts and speakers, and save the segment.
     
     Args:
         transcripts (list): List of text transcripts
         audio_files (list): List of audio filenames (without path) located in the inputs folder
-        speakers (list): List of speaker IDs
         segment_name (str): Name of the segment without file extension
     
     Returns:
@@ -31,6 +30,10 @@ def load_audio_and_save_segment(transcripts, audio_files, speakers, segment_name
     """
     # Ensure directories exist
     ensure_directories_exist()
+    
+    # Validate input lists have the same length
+    if len(transcripts) != len(audio_files):
+        raise ValueError(f"Number of transcripts ({len(transcripts)}) must match number of audio files ({len(audio_files)})")
     
     # Prepare full path for segment file
     segment_path = os.path.join("segments", f"{segment_name}.pt")
@@ -49,8 +52,8 @@ def load_audio_and_save_segment(transcripts, audio_files, speakers, segment_name
     print(f"Loading audio files from 'inputs' folder and creating segments to save as '{segment_path}'...")
     
     segments = [
-        Segment(text=transcript, speaker=speaker, audio=load_audio(audio_file))
-        for transcript, speaker, audio_file in zip(transcripts, speakers, audio_files)
+        Segment(text=transcript, speaker=1, audio=load_audio(audio_file))
+        for transcript, audio_file in zip(transcripts, audio_files)
     ]
     
     # Save the segments
@@ -111,10 +114,9 @@ def generate_audio_stream(text, segment_name="segment", output_name="audio.wav")
 # Example usage:
 if __name__ == "__main__":
     # Example for loading audio and saving segment
-    transcripts = ["coolio's mansion is a pretty cool place. It's got everything from a pool to a movie theater."]
-    audio_files = ["coolio1.mp3"]  # These files should be in the ./inputs folder
-    speakers = [1]
-    load_audio_and_save_segment(transcripts, audio_files, speakers, "coolio_segment")
+    transcripts = ["coolio's mansion is a pretty cool place. It's got everything from a pool to a movie theater.", "coolio's mansion is a pretty cool place. It's got everything from a pool to a movie theater."]
+    audio_files = ["coolio1.mp3", "coolio1.mp3"]  # These files should be in the ./inputs folder
+    load_audio_and_save_segment(transcripts, audio_files, "coolio_segment")
     
     # Example for generating audio
     generate_audio_stream(
