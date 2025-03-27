@@ -9,26 +9,62 @@ app = Flask(__name__)
 @app.route('/upload_segment', methods=['POST'])
 def upload_segment():
     """
-    Expects a JSON payload with:
-    {
-      "transcripts": ["Transcript 1", "Transcript 2", ...],
-      "audio_files": ["file1.mp3", "file2.mp3", ...],
-      "segment_name": "optional_segment_name"
-    }
+    Expects a multipart/form-data with:
+    - files: Multiple audio files
+    - transcripts: JSON string of transcript array ["Transcript 1", "Transcript 2", ...]
+    - segment_name: (optional) Name for the segment
     """
     try:
         start_time = time.time()
         print("Processing upload_segment request")
         
-        data = request.get_json()
-        transcripts = data.get('transcripts')
-        audio_files = data.get('audio_files')
-        segment_name = data.get('segment_name', 'segment')
+        # Get form data
+        segment_name = request.form.get('segment_name', 'segment')
         
-        if not transcripts or not audio_files:
-            return jsonify({"error": "Both 'transcripts' and 'audio_files' are required."}), 400
+        # Get transcripts from form data (as JSON string)
+        transcripts_json = request.form.get('transcripts')
+        if not transcripts_json:
+            return jsonify({"error": "'transcripts' is required as a JSON string array."}), 400
         
-        segments = load_audio_and_save_segment(transcripts, audio_files, segment_name)
+        try:
+            import json
+            transcripts = json.loads(transcripts_json)
+            if not isinstance(transcripts, list):
+                return jsonify({"error": "'transcripts' must be a JSON array of strings."}), 400
+        except json.JSONDecodeError:
+            return jsonify({"error": "Invalid JSON format for 'transcripts'."}), 400
+        
+        # Get uploaded files
+        files = request.files.getlist('files')
+        if not files or len(files) == 0:
+            return jsonify({"error": "No audio files uploaded. Use 'files' field to upload audio files."}), 400
+        
+        # Check if number of transcripts matches number of files
+        if len(transcripts) != len(files):
+            return jsonify({
+                "error": f"Number of transcripts ({len(transcripts)}) must match number of audio files ({len(files)})."
+            }), 400
+        
+        # Ensure directories exist
+        os.makedirs("inputs", exist_ok=True)
+        
+        # Save uploaded files to inputs directory
+        saved_filenames = []
+        for file in files:
+            if file.filename:
+                # Generate a unique filename to avoid conflicts
+                import uuid
+                file_extension = os.path.splitext(file.filename)[1]
+                unique_filename = f"{uuid.uuid4().hex}{file_extension}"
+                
+                # Save the file
+                file_path = os.path.join("inputs", unique_filename)
+                file.save(file_path)
+                saved_filenames.append(unique_filename)
+                print(f"Saved uploaded file as: {file_path}")
+        
+        # Process the saved files
+        segments = load_audio_and_save_segment(transcripts, saved_filenames, segment_name)
         
         processing_time = time.time() - start_time
         print(f"Completed upload_segment in {processing_time:.2f} seconds")
@@ -62,13 +98,12 @@ def generate_audio():
         if not text:
             return jsonify({"error": "'text' is required."}), 400
         
-        # Use fixed value for output_name
-        output_name = 'audio.wav'
-        output_path = os.path.join("results", output_name)
-        
+        # Generate audio with random output name
         generation_start = time.time()
-        generate_audio_with_model(text, segment_name, output_name)
+        _, output_name = generate_audio_with_model(text, segment_name)
         generation_time = time.time() - generation_start
+        
+        output_path = os.path.join("results", output_name)
         
         print(f"Audio generation completed in {generation_time:.2f} seconds")
         print(f"Total request processing time: {time.time() - start_time:.2f} seconds")
@@ -108,11 +143,22 @@ def index():
         "endpoints": {
             "/upload_segment": {
                 "method": "POST",
-                "description": "Upload audio segments with transcripts"
+                "content_type": "multipart/form-data",
+                "description": "Upload audio files with transcripts",
+                "parameters": {
+                    "files": "Multiple audio files (field can be repeated)",
+                    "transcripts": "JSON string array of transcripts",
+                    "segment_name": "(optional) Name for the segment"
+                }
             },
             "/generate_audio": {
                 "method": "POST",
-                "description": "Generate audio from text using a segment as context"
+                "content_type": "application/json",
+                "description": "Generate audio from text using a segment as context",
+                "parameters": {
+                    "text": "Text to generate audio from",
+                    "segment_name": "(optional) Name of the segment to use"
+                }
             },
             "/health": {
                 "method": "GET",

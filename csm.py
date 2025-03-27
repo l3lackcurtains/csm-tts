@@ -129,14 +129,14 @@ def load_audio_and_save_segment(transcripts, audio_files, segment_name="segment"
     logger.info(f"Successfully created and saved {len(segments)} segment(s) in {time.time() - start_time:.2f} seconds")
     return segments
 
-def generate_audio_with_model(text, segment_name="segment", output_name="audio.wav"):
+def generate_audio_with_model(text, segment_name="segment", output_name=None):
     """
     Generate audio using the specified segment as context and save it.
     
     Args:
         text (str): Text to generate audio for
         segment_name (str): Name of the segment without file extension
-        output_name (str): Name of the output audio file
+        output_name (str, optional): Name of the output audio file. If None, a random name will be generated.
     
     Returns:
         tuple: (audio_tensor, output_filename)
