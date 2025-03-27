@@ -5,6 +5,7 @@ import os
 import logging
 import time
 import gc
+import uuid
 
 # Configure logging
 logging.basicConfig(
@@ -15,32 +16,24 @@ logger = logging.getLogger(__name__)
 
 # Global variable to store the model (singleton pattern)
 _model = None
-_model_lock = False
 
 def get_model():
     """Get or initialize the model (singleton pattern)"""
-    global _model, _model_lock
+    global _model
     
     # If model is already loaded, return it
     if _model is not None:
         return _model
     
-    # Simple locking mechanism to prevent concurrent model loading
-    if _model_lock:
-        logger.info("Waiting for model to be loaded by another process...")
-        while _model_lock and _model is None:
-            time.sleep(0.5)
-        return _model
-    
     try:
-        _model_lock = True
         logger.info("Loading model (singleton)...")
         start_time = time.time()
         _model = load_model()
         logger.info(f"Model loaded successfully in {time.time() - start_time:.2f} seconds")
         return _model
-    finally:
-        _model_lock = False
+    except Exception as e:
+        logger.exception(f"Error loading model: {str(e)}")
+        raise
 
 def load_model():
     """Load the CSM model with appropriate device detection"""
@@ -136,25 +129,31 @@ def load_audio_and_save_segment(transcripts, audio_files, segment_name="segment"
     logger.info(f"Successfully created and saved {len(segments)} segment(s) in {time.time() - start_time:.2f} seconds")
     return segments
 
-def generate_audio_with_model(generator, text, segment_name="segment", output_name="audio.wav", max_audio_length_ms=10000):
+def generate_audio_with_model(text, segment_name="segment", output_name="audio.wav"):
     """
     Generate audio using the specified segment as context and save it.
     
     Args:
-        generator: The loaded CSM model
         text (str): Text to generate audio for
         segment_name (str): Name of the segment without file extension
         output_name (str): Name of the output audio file
-        max_audio_length_ms (int): Maximum audio length in milliseconds
     
     Returns:
-        torch.Tensor: Generated audio
+        tuple: (audio_tensor, output_filename)
     """
     start_time = time.time()
     logger.info(f"Starting audio generation for text: '{text[:50]}...' if len(text) > 50 else text")
     
+    # Get the model
+    generator = get_model()
+    
     # Ensure directories exist
     ensure_directories_exist()
+    
+    # If no output_name is provided, generate a random one
+    if not output_name:
+        output_name = f"audio_{uuid.uuid4().hex[:8]}.wav"
+        logger.info(f"Generated random output filename: {output_name}")
     
     # Prepare full paths
     segment_path = os.path.join("segments", f"{segment_name}.pt")
@@ -179,12 +178,42 @@ def generate_audio_with_model(generator, text, segment_name="segment", output_na
         # Generate audio
         logger.info("Generating audio...")
         generation_start = time.time()
-        audio = generator.generate(
-            text=text,
-            speaker=speaker,
-            context=loaded_segments,
-            max_audio_length_ms=max_audio_length_ms,
-        )
+        
+        # Generate with max_audio_length_ms parameter to limit initial generation
+        # This is a reasonable default that should work for most texts
+        max_audio_length_ms = len(text) * 120  # ~120ms per character as a heuristic
+        
+        generate_kwargs = {
+            "text": text,
+            "speaker": speaker,
+            "context": loaded_segments,
+            "max_audio_length_ms": max_audio_length_ms
+        }
+        
+        logger.info(f"Setting maximum audio length to {max_audio_length_ms} ms based on text length")
+        audio = generator.generate(**generate_kwargs)
+        
+        # Trim silence at the end of the audio
+        # Find the last non-silent part (where amplitude is above threshold)
+        threshold = 0.01  # Adjust this threshold as needed
+        amplitude = torch.abs(audio)
+        non_silent = amplitude > threshold
+        
+        if torch.any(non_silent):
+            # Find the last index where audio is above threshold
+            last_sound_idx = torch.where(non_silent)[0][-1].item()
+            # Add a small buffer (e.g., 0.5 seconds worth of samples)
+            buffer_samples = int(0.5 * generator.sample_rate)
+            end_idx = min(last_sound_idx + buffer_samples, audio.shape[0])
+            
+            # Trim the audio
+            original_length = audio.shape[0]
+            audio = audio[:end_idx]
+            trimmed_length = audio.shape[0]
+            
+            logger.info(f"Trimmed audio from {original_length} to {trimmed_length} samples " +
+                       f"({original_length/generator.sample_rate:.2f}s to {trimmed_length/generator.sample_rate:.2f}s)")
+        
         generation_time = time.time() - generation_start
         logger.info(f"Audio generation completed in {generation_time:.2f} seconds")
         
@@ -197,18 +226,11 @@ def generate_audio_with_model(generator, text, segment_name="segment", output_na
             torch.cuda.empty_cache()
         
         logger.info(f"Total processing time: {time.time() - start_time:.2f} seconds")
-        return audio
+        return audio, output_name  # Return both the audio and the filename
     except Exception as e:
         logger.exception(f"Error generating audio: {str(e)}")
         # Clear CUDA cache on error
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         raise e
-
-# Keep the original function for backward compatibility
-def generate_audio_stream(text, segment_name="segment", output_name="audio.wav", max_audio_length_ms=10000):
-    """Legacy function that loads the model each time - not recommended for web service"""
-    logger.warning("Using legacy generate_audio_stream function - not recommended for web service")
-    generator = load_model()
-    return generate_audio_with_model(generator, text, segment_name, output_name, max_audio_length_ms)
 
