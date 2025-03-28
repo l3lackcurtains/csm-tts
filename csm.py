@@ -234,3 +234,20 @@ def generate_audio_with_model(text, segment_name="segment", output_name=None):
             torch.cuda.empty_cache()
         raise e
 
+
+
+
+# Example usage:
+if __name__ == "__main__":
+    # Example for loading audio and saving segment
+    transcripts = ["coolio's mansion is a pretty cool place. It's got everything from a pool to a movie theater.", "coolio's mansion is a pretty cool place. It's got everything from a pool to a movie theater."]
+    audio_files = ["coolio1.mp3", "coolio1.mp3"]  # These files should be in the ./inputs folder
+    load_audio_and_save_segment(transcripts, audio_files, "coolio_segment")
+    
+    # Example for generating audio
+    generate_audio_with_model(
+        text="Hello sir, im good and whaaaaass up!!",
+        segment_name="coolio_segment",
+        output_name="audio.wav"
+    )
+    
