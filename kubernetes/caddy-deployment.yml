@@ -18,13 +18,13 @@ spec:
           ports:
             - containerPort: 8383
           volumeMounts:
-            - name: caddy-config
+            - name: csm-caddy-config
               mountPath: /etc/caddy/Caddyfile
               subPath: Caddyfile
       volumes:
-        - name: caddy-config
+        - name: csm-caddy-config
           configMap:
-            name: caddy-config
+            name: csm-caddy-config
 ---
 apiVersion: v1
 kind: Service
@@ -35,7 +35,7 @@ spec:
   selector:
     app: caddy
   ports:
-    - name: silk-http
+    - name: csm-http
       protocol: TCP
       port: 8383
       targetPort: 8383

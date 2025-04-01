@@ -36,24 +36,19 @@ def get_model():
         raise
 
 def load_model():
-    """Load the CSM model with appropriate device detection"""
-    # Determine the best available device
-    if torch.backends.mps.is_available():
-        device = "mps"
-    elif torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
-    
-    logger.info(f"Using device: {device}")
+    """Load the CSM model with CUDA"""
+    if not torch.cuda.is_available():
+        logger.error("CUDA is not available. This application requires a CUDA-enabled GPU.")
+        exit(1)
+        
+    logger.info("Using device: cuda")
     
     # Clear memory before loading model
     gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
     
     try:
-        model = load_csm_1b(device=device)
+        model = load_csm_1b(device="cuda")
         return model
     except Exception as e:
         logger.exception(f"Error loading model: {str(e)}")
@@ -234,17 +229,4 @@ def generate_audio_with_model(text, segment_name="segment", output_name=None):
             torch.cuda.empty_cache()
         raise e
 
-# Example usage:
-if __name__ == "__main__":
-    # Example for loading audio and saving segment
-    transcripts = ["coolio's mansion is a pretty cool place. It's got everything from a pool to a movie theater.", "coolio's mansion is a pretty cool place. It's got everything from a pool to a movie theater."]
-    audio_files = ["coolio1.mp3", "coolio1.mp3"]  # These files should be in the ./inputs folder
-    load_audio_and_save_segment(transcripts, audio_files, "coolio_segment")
-    
-    # Example for generating audio
-    generate_audio_with_model(
-        text="Hello sir, im good and whaaaaass up!!",
-        segment_name="coolio_segment",
-        output_name="audio.wav"
-    )
     

@@ -13,35 +13,46 @@ spec:
         app: csm-api
     spec:
       containers:
-      - name: csm-api
-        image: gcr.io/citric-lead-450721-v2/silk-csm:1.0.0
-        ports:
-        - containerPort: 8383
-        resources:
-          limits:
-            nvidia.com/gpu: 1
-        volumeMounts:
-        - name: inputs-volume
-          mountPath: /app/inputs
-        - name: results-volume
-          mountPath: /app/results
-        - name: local-models-volume
-          mountPath: /app/local_models
-        - name: segments-volume
-          mountPath: /app/segments
+        - name: csm-api
+          image: gcr.io/citric-lead-450721-v2/silk-csm:1.0.0
+          ports:
+            - containerPort: 8383
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              cpu: "15"
+              memory: "58Gi"
+            requests:
+              nvidia.com/gpu: 1
+              cpu: "8"
+              memory: "48Gi"
+
+          volumeMounts:
+            - name: inputs-volume
+              mountPath: /app/inputs
+            - name: results-volume
+              mountPath: /app/results
+            - name: local-models-volume
+              mountPath: /app/local_models
+            - name: segments-volume
+              mountPath: /app/segments
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
       volumes:
-      - name: inputs-volume
-        persistentVolumeClaim:
-          claimName: inputs-pvc
-      - name: results-volume
-        persistentVolumeClaim:
-          claimName: results-pvc
-      - name: local-models-volume
-        persistentVolumeClaim:
-          claimName: local-models-pvc
-      - name: segments-volume
-        persistentVolumeClaim:
-          claimName: segments-pvc
+        - name: inputs-volume
+          persistentVolumeClaim:
+            claimName: inputs-pvc
+        - name: results-volume
+          persistentVolumeClaim:
+            claimName: results-pvc
+        - name: local-models-volume
+          persistentVolumeClaim:
+            claimName: local-models-pvc
+        - name: segments-volume
+          persistentVolumeClaim:
+            claimName: segments-pvc
 ---
 # PersistentVolumeClaims for the required volumes
 apiVersion: v1

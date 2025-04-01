@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: caddy-config
+  name: csm-caddy-config
 data:
   Caddyfile: |
     :8383 {
-        reverse_proxy silk-service:3939
+        reverse_proxy csm-api-service:8383
     }

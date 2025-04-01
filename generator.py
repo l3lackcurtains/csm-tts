@@ -9,8 +9,9 @@ from moshi.models import loaders
 from tokenizers.processors import TemplateProcessing
 from transformers import AutoTokenizer
 from watermarking import CSM_1B_GH_WATERMARK, load_watermarker, watermark
+import os
 
-cache_directory = "./local_models"
+local_model_directory = "./local_models"
 
 @dataclass
 class Segment:
@@ -24,8 +25,8 @@ def load_llama3_tokenizer():
     """
     https://github.com/huggingface/transformers/issues/22794#issuecomment-2092623992
     """
-    tokenizer_name = "meta-llama/Llama-3.2-1B"
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, cache_dir=cache_directory)
+    local_path = f"{local_model_directory}/meta-llama/Llama-3.2-1B"
+    tokenizer = AutoTokenizer.from_pretrained(local_path)
     bos = tokenizer.bos_token
     eos = tokenizer.eos_token
     tokenizer._tokenizer.post_processor = TemplateProcessing(
@@ -170,7 +171,8 @@ class Generator:
 
 
 def load_csm_1b(device: str = "cuda") -> Generator:
-    model = Model.from_pretrained("sesame/csm-1b", cache_dir=cache_directory)
+    local_path = f"{local_model_directory}/sesame/csm-1b"
+    model = Model.from_pretrained(pretrained_model_name_or_path=local_path)
     model.to(device=device, dtype=torch.bfloat16)
 
     generator = Generator(model)
