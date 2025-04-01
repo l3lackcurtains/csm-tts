@@ -1,4 +1,4 @@
-### Download the model
+### Download the models
 
 ```bash
 huggingface-cli download sesame/csm-1b --local-dir ./local_models/sesame/csm-1b
