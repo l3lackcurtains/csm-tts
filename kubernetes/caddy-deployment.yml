@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: caddy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: caddy
+  template:
+    metadata:
+      labels:
+        app: caddy
+    spec:
+      containers:
+        - name: caddy
+          image: caddy:latest
+          ports:
+            - containerPort: 8383
+          volumeMounts:
+            - name: caddy-config
+              mountPath: /etc/caddy/Caddyfile
+              subPath: Caddyfile
+      volumes:
+        - name: caddy-config
+          configMap:
+            name: caddy-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: caddy
+  ports:
+    - name: silk-http
+      protocol: TCP
+      port: 8383
+      targetPort: 8383

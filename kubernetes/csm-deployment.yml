@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: csm-api-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: csm-api
+  template:
+    metadata:
+      labels:
+        app: csm-api
+    spec:
+      containers:
+      - name: csm-api
+        image: gcr.io/citric-lead-450721-v2/silk-csm:1.0.0
+        ports:
+        - containerPort: 8383
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: inputs-volume
+          mountPath: /app/inputs
+        - name: results-volume
+          mountPath: /app/results
+        - name: local-models-volume
+          mountPath: /app/local_models
+        - name: segments-volume
+          mountPath: /app/segments
+      volumes:
+      - name: inputs-volume
+        persistentVolumeClaim:
+          claimName: inputs-pvc
+      - name: results-volume
+        persistentVolumeClaim:
+          claimName: results-pvc
+      - name: local-models-volume
+        persistentVolumeClaim:
+          claimName: local-models-pvc
+      - name: segments-volume
+        persistentVolumeClaim:
+          claimName: segments-pvc
+---
+# PersistentVolumeClaims for the required volumes
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: inputs-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: results-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: local-models-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: segments-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: csm-api-service
+spec:
+  selector:
+    app: csm-api
+  ports:
+    - port: 8383
+      targetPort: 8383
+  type: ClusterIP
