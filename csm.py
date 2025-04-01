@@ -160,7 +160,9 @@ def generate_audio_with_model(text, segment_name="segment", output_name=None):
     
     # Load the segment from the file
     logger.info(f"Loading segments from {segment_path}")
-    loaded_segments = torch.load(segment_path)
+    # Note: weights_only=False is required for PyTorch 2.6+ to load custom objects weights_only=False)  # Explicitly set weights_only=False
+    # Only use this with segment files from trusted sources as it can execute arbitrary code
+    loaded_segments = torch.load(segment_path, weights_only=False)
     if not isinstance(loaded_segments, list):
         loaded_segments = [loaded_segments]
     
@@ -229,4 +231,3 @@ def generate_audio_with_model(text, segment_name="segment", output_name=None):
             torch.cuda.empty_cache()
         raise e
 
-    
