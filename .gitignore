@@ -46,3 +46,4 @@ context_audio.wav
 *.ckpt
 
 local_models/
+results/

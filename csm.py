@@ -234,9 +234,6 @@ def generate_audio_with_model(text, segment_name="segment", output_name=None):
             torch.cuda.empty_cache()
         raise e
 
-
-
-
 # Example usage:
 if __name__ == "__main__":
     # Example for loading audio and saving segment
