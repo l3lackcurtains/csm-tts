@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: csm-api
-          image: gcr.io/citric-lead-450721-v2/silk-csm:1.0.0
+          image: gcr.io/citric-lead-450721-v2/silk-csm:1.0.3
           ports:
             - containerPort: 8383
           resources:

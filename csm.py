@@ -98,7 +98,7 @@ def generate_audio_with_model(text, segment_name="segment"):
         segment_name = "segment"  # Use default if None is passed explicitly
         
     start_time = time.time()
-    logger.info(f"Starting audio generation for text: '{text[:50]}...' if len(text) > 50 else text")
+    logger.info(f"Starting audio generation for text: '{text[:50]}...")
     
     # Prepare full paths for segment only
     segment_path = os.path.join("segments", f"{segment_name}.pt")
