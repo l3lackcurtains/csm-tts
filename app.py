@@ -55,48 +55,45 @@ def upload_segment():
         start_time = time.time()
         print("Processing upload_segment request")
         
-        # Get form data
         name = request.form.get('name', 'segment')
-        
-        # Get files and transcripts
         uploaded_files = request.files.getlist('files')
         transcripts = request.form.getlist('transcripts')
         
-        # Filter out empty file uploads
         files = [f for f in uploaded_files if f.filename]
         
-        # Validate mandatory fields
         if not files or not transcripts or len(files) < 1 or len(transcripts) < 1:
             return jsonify({
                 "error": "At minimum, one file and one transcript must be provided."
             }), 400
             
-        # Ensure matching number of files and transcripts
         if len(files) != len(transcripts):
             return jsonify({
                 "error": f"Number of files ({len(files)}) doesn't match number of transcripts ({len(transcripts)})."
             }), 400
         
-        # Ensure directories exist
-        os.makedirs("inputs", exist_ok=True)
-        
-        # Save uploaded files to inputs directory
-        saved_filenames = []
-        for file in files:
-            if file.filename:
-                # Generate a unique filename to avoid conflicts
-                import uuid
-                file_extension = os.path.splitext(file.filename)[1]
-                unique_filename = f"{uuid.uuid4().hex}{file_extension}"
-                
-                # Save the file
-                file_path = os.path.join("inputs", unique_filename)
-                file.save(file_path)
-                saved_filenames.append(unique_filename)
-                print(f"Saved uploaded file as: {file_path}")
-        
-        # Process the saved files
-        segments = load_audio_and_save_segment(transcripts, saved_filenames, name)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_files = []
+            for file in files:
+                if file.filename:
+                    import uuid
+                    file_extension = os.path.splitext(file.filename)[1]
+                    unique_filename = f"{uuid.uuid4().hex}{file_extension}"
+                    
+                    file_path = os.path.join(temp_dir, unique_filename)
+                    file.save(file_path)
+                    temp_files.append(file_path)
+                    print(f"Saved uploaded file as: {file_path}")
+            
+            try:
+                segments = load_audio_and_save_segment(transcripts, temp_files, name)
+            finally:
+                for temp_file in temp_files:
+                    try:
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                            print(f"Deleted temporary file: {temp_file}")
+                    except Exception as e:
+                        print(f"Error deleting temporary file {temp_file}: {e}")
         
         processing_time = time.time() - start_time
         print(f"Completed upload_segment in {processing_time:.2f} seconds")

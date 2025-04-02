@@ -14,15 +14,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def ensure_directories_exist():
-    """Create necessary directories if they don't exist."""
-    os.makedirs("segments", exist_ok=True)
-    os.makedirs("inputs", exist_ok=True)
-    logger.info("Ensured that 'segments' and 'inputs' directories exist")
-
-# Ensure directories exist when module is loaded
-ensure_directories_exist()
-
 # Load model directly when module is imported (singleton pattern)
 _model = None
 try:
