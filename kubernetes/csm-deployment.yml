@@ -26,79 +26,10 @@ spec:
               nvidia.com/gpu: 1
               cpu: "8"
               memory: "48Gi"
-
-          volumeMounts:
-            - name: inputs-volume
-              mountPath: /app/inputs
-            - name: results-volume
-              mountPath: /app/results
-            - name: local-models-volume
-              mountPath: /app/local_models
-            - name: segments-volume
-              mountPath: /app/segments
       tolerations:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
-      volumes:
-        - name: inputs-volume
-          persistentVolumeClaim:
-            claimName: inputs-pvc
-        - name: results-volume
-          persistentVolumeClaim:
-            claimName: results-pvc
-        - name: local-models-volume
-          persistentVolumeClaim:
-            claimName: local-models-pvc
-        - name: segments-volume
-          persistentVolumeClaim:
-            claimName: segments-pvc
----
-# PersistentVolumeClaims for the required volumes
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: inputs-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: results-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: local-models-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 10Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: segments-pvc
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
-
 ---
 apiVersion: v1
 kind: Service
