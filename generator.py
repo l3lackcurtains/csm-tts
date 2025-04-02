@@ -171,9 +171,8 @@ class Generator:
 
 
 def load_csm_1b(device: str = "cuda") -> Generator:
-    local_path = f"{local_model_directory}/sesame/csm-1b"
-    model = Model.from_pretrained(pretrained_model_name_or_path=local_path)
+    model = Model.from_pretrained("sesame/csm-1b")
     model.to(device=device, dtype=torch.bfloat16)
-
+    model.decoder = torch.compile(model.decoder, fullgraph=True, backend='cudagraphs')
     generator = Generator(model)
     return generator
