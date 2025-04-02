@@ -63,23 +63,17 @@ def upload_segment():
         start_time = time.time()
         print("Processing upload_segment request")
         
-        # Get form data
         name = request.form.get('name', 'segment')
-        
-        # Get files and transcripts
         uploaded_files = request.files.getlist('files')
         transcripts = request.form.getlist('transcripts')
         
-        # Filter out empty file uploads
         files = [f for f in uploaded_files if f.filename]
         
-        # Validate mandatory fields
         if not files or not transcripts or len(files) < 1 or len(transcripts) < 1:
             return jsonify({
                 "error": "At minimum, one file and one transcript must be provided."
             }), 400
             
-        # Ensure matching number of files and transcripts
         if len(files) != len(transcripts):
             return jsonify({
                 "error": f"Number of files ({len(files)}) doesn't match number of transcripts ({len(transcripts)})."
