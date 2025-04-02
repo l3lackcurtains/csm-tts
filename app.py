@@ -25,17 +25,19 @@ def cache_audio(func):
         # Return cached result if available
         if (cache_key in audio_cache):
             print(f"Cache hit for text: '{text[:30]}...'")
-            return audio_cache[cache_key]
+            # For cached results, we don't have the processing time
+            # Return a tuple with the cached audio and None for processing time
+            return audio_cache[cache_key], 0.0
         
         # Generate new result
-        result = func(text, name)
+        result, processing_time = func(text, name)
         
-        # Store in cache (with simple LRU behavior)
+        # Store only the audio in cache (with simple LRU behavior)
         if len(audio_cache) >= MAX_CACHE_SIZE:
             # Remove a random item if cache is full
             audio_cache.pop(next(iter(audio_cache)))
         audio_cache[cache_key] = result
-        return result
+        return result, processing_time
     return wrapper
 
 # Apply cache to the generate_audio_with_model function
@@ -131,15 +133,13 @@ def generate_audio():
             return jsonify({"error": "'text' is required."}), 400
         
         # Generate audio file
-        generation_start = time.time()
-        audio_tensor = generate_audio_with_model(text, name)
-        generation_time = time.time() - generation_start
+        audio_tensor, processing_time = generate_audio_with_model(text, name)
         
         # Check if audio data is valid
         if audio_tensor is None:
             return jsonify({
             "error": "Failed to generate audio. No audio data was produced.",
-            "generation_time": generation_time
+            "processing_time": processing_time
             }), 500
         
         # Convert tensor to bytes using an in-memory buffer
@@ -164,13 +164,15 @@ def generate_audio():
         buffer.seek(0)
         audio_bytes = buffer.read()
         
-        print(f"Audio generation completed in {generation_time:.2f} seconds")
+        print(f"Audio generation completed in {processing_time:.2f} seconds")
         print(f"Total request processing time: {time.time() - start_time:.2f} seconds")
         
         # Send audio bytes directly as a response
         response = make_response(audio_bytes)
         response.headers['Content-Type'] = content_type
         response.headers['Content-Disposition'] = f'inline; filename="{filename}"'
+        # Add processing time as a header for debugging/monitoring
+        response.headers['X-Processing-Time'] = f"{processing_time:.2f}"
         return response
             
     except Exception as e:
@@ -194,14 +196,12 @@ def generate_audio_file():
             return jsonify({"error": "'text' is required."}), 400
         
         # Generate audio 
-        generation_start = time.time()
-        audio_tensor = generate_audio_with_model(text, name)
-        generation_time = time.time() - generation_start
+        audio_tensor, processing_time = generate_audio_with_model(text, name)
         
         if audio_tensor is None:
             return jsonify({
                 "error": "Failed to generate audio. No audio data was produced.",
-                "processing_time": generation_time
+                "processing_time": processing_time
             }), 500
         
         # Save to temporary file
@@ -210,7 +210,7 @@ def generate_audio_file():
             # Move tensor to CPU and save
             torchaudio.save(temp_path, audio_tensor.cpu().unsqueeze(0), sample_rate=24000)
         
-        print(f"Audio generation completed in {generation_time:.2f} seconds")
+        print(f"Audio generation completed in {processing_time:.2f} seconds")
         
         @after_this_request
         def cleanup(response):
@@ -223,12 +223,15 @@ def generate_audio_file():
                     print(f"Error deleting temporary file: {e}")
             return response
         
-        return send_file(
+        response = send_file(
             temp_path,
             mimetype='audio/wav',
             as_attachment=True,
             download_name='generated_audio.wav'
         )
+        # Add processing time as a header for debugging/monitoring
+        response.headers['X-Processing-Time'] = f"{processing_time:.2f}"
+        return response
     
     except Exception as e:
         # Clean up temp file in case of error

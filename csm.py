@@ -98,7 +98,7 @@ def generate_audio_with_model(text, segment_name="segment"):
         segment_name (str): Name of the segment without file extension
     
     Returns:
-        torch.Tensor: Generated audio tensor
+        tuple: (torch.Tensor, float) - Generated audio tensor and processing time in seconds
     """
     # Validate input parameters
     if text is None:
@@ -117,7 +117,6 @@ def generate_audio_with_model(text, segment_name="segment"):
         raise FileNotFoundError(f"Segment file {segment_path} not found")
     
     # Load the segment from the file
-    logger.info(f"Loading segments from {segment_path}")
     loaded_segments = torch.load(segment_path, weights_only=False)
     if not isinstance(loaded_segments, list):
         loaded_segments = [loaded_segments]
@@ -146,14 +145,16 @@ def generate_audio_with_model(text, segment_name="segment"):
         audio = _model.generate(**generate_kwargs)
         
         generation_time = time.time() - generation_start
+        total_time = time.time() - start_time
+        
         logger.info(f"Audio generation completed in {generation_time:.2f} seconds")
-        logger.info(f"Total processing time: {time.time() - start_time:.2f} seconds")
+        logger.info(f"Total processing time: {total_time:.2f} seconds")
         
         # Clear CUDA cache after generation
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         
-        return audio
+        return audio, total_time
     except Exception as e:
         logger.exception(f"Error generating audio: {str(e)}")
         # Clear CUDA cache on error
