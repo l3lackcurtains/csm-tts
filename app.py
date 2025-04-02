@@ -7,6 +7,7 @@ from io import BytesIO
 import hashlib
 import functools
 import tempfile
+import shutil
 
 app = Flask(__name__)
 
@@ -43,6 +44,10 @@ def cache_audio(func):
 # Apply cache to the generate_audio_with_model function
 generate_audio_with_model = cache_audio(generate_audio_with_model)
 
+# Create temporary directory for our uploads if it doesn't exist
+TEMP_DIR = os.path.join(tempfile.gettempdir(), "csm-tts-temp")
+os.makedirs(TEMP_DIR, exist_ok=True)
+
 @app.route('/upload-segment', methods=['POST'])
 def upload_segment():
     """
@@ -51,6 +56,9 @@ def upload_segment():
     - transcripts: Multiple text transcripts (at least one is required)
     - name: (optional) Name for the segment
     """
+    # Track saved files for cleanup in case of error
+    saved_files = []
+    
     try:
         start_time = time.time()
         print("Processing upload_segment request")
@@ -77,10 +85,11 @@ def upload_segment():
                 "error": f"Number of files ({len(files)}) doesn't match number of transcripts ({len(transcripts)})."
             }), 400
         
-        # Ensure directories exist
-        os.makedirs("inputs", exist_ok=True)
+        # Create a temporary directory for this specific upload session
+        temp_upload_dir = os.path.join(TEMP_DIR, f"upload_{int(time.time())}_{os.urandom(4).hex()}")
+        os.makedirs(temp_upload_dir, exist_ok=True)
         
-        # Save uploaded files to inputs directory
+        # Save uploaded files to temp directory
         saved_filenames = []
         for file in files:
             if file.filename:
@@ -89,14 +98,24 @@ def upload_segment():
                 file_extension = os.path.splitext(file.filename)[1]
                 unique_filename = f"{uuid.uuid4().hex}{file_extension}"
                 
-                # Save the file
-                file_path = os.path.join("inputs", unique_filename)
+                # Save the file to temp directory
+                file_path = os.path.join(temp_upload_dir, unique_filename)
                 file.save(file_path)
-                saved_filenames.append(unique_filename)
+                saved_filenames.append(file_path)
+                saved_files.append(file_path)  # Track for cleanup
                 print(f"Saved uploaded file as: {file_path}")
         
         # Process the saved files
+        # Ensure segment directory exists
+        os.makedirs("segments", exist_ok=True)
         segments = load_audio_and_save_segment(transcripts, saved_filenames, name)
+        
+        # Clean up - delete temp directory after processing
+        try:
+            shutil.rmtree(temp_upload_dir)
+            print(f"Deleted temporary directory: {temp_upload_dir}")
+        except Exception as e:
+            print(f"Warning: Could not delete temporary directory {temp_upload_dir}: {e}")
         
         processing_time = time.time() - start_time
         print(f"Completed upload_segment in {processing_time:.2f} seconds")
@@ -106,6 +125,14 @@ def upload_segment():
             "processing_time": processing_time
         }), 200
     except Exception as e:
+        # Clean up temp files in case of error
+        for file_path in saved_files:
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as cleanup_error:
+                print(f"Warning: Could not delete temporary file {file_path}: {cleanup_error}")
+                
         print(f"Error in upload_segment: {e}")
         return jsonify({"error": str(e)}), 500
 
@@ -370,26 +397,34 @@ def upload_file():
         # Ensure name is safe
         name = ''.join(c for c in name if c.isalnum() or c in ['-', '_'])
         
+        # Create temporary file path
+        temp_file_path = os.path.join(TEMP_DIR, f"{name}_{int(time.time())}.pt")
+        
+        # Save to temp location first
+        file.save(temp_file_path)
+        print(f"Temporarily saved uploaded segment to: {temp_file_path}")
+        
         # Ensure segment directory exists
         os.makedirs("segments", exist_ok=True)
         
-        # Create file path with .pt extension
+        # Create final file path with .pt extension
         if not name.endswith('.pt'):
             name += '.pt'
             
-        file_path = os.path.join("segments", name)
+        final_file_path = os.path.join("segments", name)
         
-        # Save the uploaded file
-        file.save(file_path)
+        # Move from temp to final location
+        shutil.move(temp_file_path, final_file_path)
+        print(f"Moved segment file to: {final_file_path}")
         
         processing_time = time.time() - start_time
-        print(f"Uploaded segment file as: {file_path} in {processing_time:.2f} seconds")
+        print(f"Uploaded segment file as: {final_file_path} in {processing_time:.2f} seconds")
         
         # Return success response
         return jsonify({
             "message": f"Successfully uploaded segment file as '{name}'",
             "name": os.path.splitext(name)[0],
-            "file_path": file_path,
+            "file_path": final_file_path,
             "processing_time": processing_time
         }), 200
         

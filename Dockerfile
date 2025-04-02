@@ -37,9 +37,6 @@ RUN conda run -n tts pip install "silentcipher @ git+https://github.com/SesameAI
 
 ENV NO_TORCH_COMPILE=1
 
-# Create directories
-RUN mkdir -p inputs results
-
 EXPOSE 8383
 
 # Use conda environment when running the application
