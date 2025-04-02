@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: csm-api-deployment
+  name: csm-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: csm-api
+      app: csm
   template:
     metadata:
       labels:
-        app: csm-api
+        app: csm
     spec:
       containers:
-        - name: csm-api
+        - name: csm
           image: gcr.io/citric-lead-450721-v2/silk-csm:1.0.3
           ports:
             - containerPort: 8383
@@ -34,10 +34,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: csm-api-service
+  name: csm-service
 spec:
   selector:
-    app: csm-api
+    app: csm
   ports:
     - port: 8383
       targetPort: 8383

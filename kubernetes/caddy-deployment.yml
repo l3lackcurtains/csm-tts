@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: caddy
+  name: csm-caddy
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: caddy
+      app: csm
   template:
     metadata:
       labels:
-        app: caddy
+        app: csm
     spec:
       containers:
         - name: caddy
@@ -29,11 +29,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: caddy-service
+  name: csm-caddy-service
 spec:
   type: LoadBalancer
   selector:
-    app: caddy
+    app: csm
   ports:
     - name: csm-http
       protocol: TCP
