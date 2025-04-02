@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_file, g, Response, make_response
+from flask import Flask, request, jsonify, send_file, g, Response, make_response, after_this_request
 from csm import load_audio_and_save_segment, generate_audio_with_model
 import os
 import time
@@ -18,17 +18,17 @@ MAX_CACHE_SIZE = 100
 # Cache decorator for audio generation
 def cache_audio(func):
     @functools.wraps(func)
-    def wrapper(text, segment_name):
-        # Create a cache key based on text and segment_name
-        cache_key = f"{segment_name}:{hashlib.md5(text.encode()).hexdigest()}"
+    def wrapper(text, name):
+        # Create a cache key based on text and name
+        cache_key = f"{name}:{hashlib.md5(text.encode()).hexdigest()}"
         
         # Return cached result if available
-        if cache_key in audio_cache:
+        if (cache_key in audio_cache):
             print(f"Cache hit for text: '{text[:30]}...'")
             return audio_cache[cache_key]
         
         # Generate new result
-        result = func(text, segment_name)
+        result = func(text, name)
         
         # Store in cache (with simple LRU behavior)
         if len(audio_cache) >= MAX_CACHE_SIZE:
@@ -41,43 +41,38 @@ def cache_audio(func):
 # Apply cache to the generate_audio_with_model function
 generate_audio_with_model = cache_audio(generate_audio_with_model)
 
-@app.route('/upload_segment', methods=['POST'])
+@app.route('/upload-segment', methods=['POST'])
 def upload_segment():
     """
     Expects a multipart/form-data with:
-    - files: Multiple audio files
-    - transcripts: JSON string of transcript array ["Transcript 1", "Transcript 2", ...]
-    - segment_name: (optional) Name for the segment
+    - files: Multiple audio files (at least one is required)
+    - transcripts: Multiple text transcripts (at least one is required)
+    - name: (optional) Name for the segment
     """
     try:
         start_time = time.time()
         print("Processing upload_segment request")
         
         # Get form data
-        segment_name = request.form.get('segment_name', 'segment')
+        name = request.form.get('name', 'segment')
         
-        # Get transcripts from form data (as JSON string)
-        transcripts_json = request.form.get('transcripts')
-        if not transcripts_json:
-            return jsonify({"error": "'transcripts' is required as a JSON string array."}), 400
+        # Get files and transcripts
+        uploaded_files = request.files.getlist('files')
+        transcripts = request.form.getlist('transcripts')
         
-        try:
-            import json
-            transcripts = json.loads(transcripts_json)
-            if not isinstance(transcripts, list):
-                return jsonify({"error": "'transcripts' must be a JSON array of strings."}), 400
-        except json.JSONDecodeError:
-            return jsonify({"error": "Invalid JSON format for 'transcripts'."}), 400
+        # Filter out empty file uploads
+        files = [f for f in uploaded_files if f.filename]
         
-        # Get uploaded files
-        files = request.files.getlist('files')
-        if not files or len(files) == 0:
-            return jsonify({"error": "No audio files uploaded. Use 'files' field to upload audio files."}), 400
-        
-        # Check if number of transcripts matches number of files
-        if len(transcripts) != len(files):
+        # Validate mandatory fields
+        if not files or not transcripts or len(files) < 1 or len(transcripts) < 1:
             return jsonify({
-                "error": f"Number of transcripts ({len(transcripts)}) must match number of audio files ({len(files)})."
+                "error": "At minimum, one file and one transcript must be provided."
+            }), 400
+            
+        # Ensure matching number of files and transcripts
+        if len(files) != len(transcripts):
+            return jsonify({
+                "error": f"Number of files ({len(files)}) doesn't match number of transcripts ({len(transcripts)})."
             }), 400
         
         # Ensure directories exist
@@ -99,26 +94,26 @@ def upload_segment():
                 print(f"Saved uploaded file as: {file_path}")
         
         # Process the saved files
-        segments = load_audio_and_save_segment(transcripts, saved_filenames, segment_name)
+        segments = load_audio_and_save_segment(transcripts, saved_filenames, name)
         
         processing_time = time.time() - start_time
         print(f"Completed upload_segment in {processing_time:.2f} seconds")
         
         return jsonify({
-            "message": f"Successfully created and saved {len(segments)} segment(s) as '{segment_name}.pt'",
-            "processing_time_seconds": processing_time
+            "message": f"Successfully created and saved {len(segments)} segment(s) as '{name}.pt'",
+            "processing_time": processing_time
         }), 200
     except Exception as e:
         print(f"Error in upload_segment: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/generate_audio', methods=['POST'])
+@app.route('/generate-audio', methods=['POST'])
 def generate_audio():
     """
     Expects a JSON payload with:
     {
       "text": "Text to generate audio from",
-      "segment_name": "optional_segment_name",
+      "name": "optional_name",
       "format": "optional_format" (wav, mp3)
     }
     Returns the generated audio directly as a stream.
@@ -129,7 +124,7 @@ def generate_audio():
         
         data = request.get_json()
         text = data.get('text')
-        segment_name = data.get('segment_name', 'segment')
+        name = data.get('name', 'segment')
         audio_format = data.get('format', 'wav')
         
         if not text:
@@ -137,7 +132,7 @@ def generate_audio():
         
         # Generate audio file
         generation_start = time.time()
-        audio_tensor = generate_audio_with_model(text, segment_name)
+        audio_tensor = generate_audio_with_model(text, name)
         generation_time = time.time() - generation_start
         
         # Check if audio data is valid
@@ -182,6 +177,222 @@ def generate_audio():
         print(f"Error in generate_audio: {e}")
         return jsonify({"error": str(e)}), 500
 
+# For benchmarking: Alternative file-based version
+@app.route('/generate-audio-file', methods=['POST'])
+def generate_audio_file():
+    """Alternative implementation using temporary files"""
+    temp_path = None
+    try:
+        start_time = time.time()
+        print("Processing generate_audio_file request")
+        
+        data = request.get_json()
+        text = data.get('text')
+        name = data.get('name', 'segment')
+        
+        if not text:
+            return jsonify({"error": "'text' is required."}), 400
+        
+        # Generate audio 
+        generation_start = time.time()
+        audio_tensor = generate_audio_with_model(text, name)
+        generation_time = time.time() - generation_start
+        
+        if audio_tensor is None:
+            return jsonify({
+                "error": "Failed to generate audio. No audio data was produced.",
+                "processing_time": generation_time
+            }), 500
+        
+        # Save to temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as temp_file:
+            temp_path = temp_file.name
+            # Move tensor to CPU and save
+            torchaudio.save(temp_path, audio_tensor.cpu().unsqueeze(0), sample_rate=24000)
+        
+        print(f"Audio generation completed in {generation_time:.2f} seconds")
+        
+        @after_this_request
+        def cleanup(response):
+            # Delete the temp file after the response is sent
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                    print(f"Deleted temporary file: {temp_path}")
+                except Exception as e:
+                    print(f"Error deleting temporary file: {e}")
+            return response
+        
+        return send_file(
+            temp_path,
+            mimetype='audio/wav',
+            as_attachment=True,
+            download_name='generated_audio.wav'
+        )
+    
+    except Exception as e:
+        # Clean up temp file in case of error
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+        print(f"Error in generate_audio_file: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/list-segments', methods=['GET'])
+def list_segments():
+    """
+    List all available segment files
+    """
+    try:
+        # Define where segments are stored - check multiple possible locations
+        segment_directories = ["segments"]
+        
+        # Get all .pt files from all potential directories
+        files = []
+        for segments_dir in segment_directories:
+            if not os.path.exists(segments_dir):
+                continue
+                
+            for file in os.listdir(segments_dir):
+                if file.endswith('.pt'):
+                    # Get file info
+                    file_path = os.path.join(segments_dir, file)
+                    file_stat = os.stat(file_path)
+                    
+                    # Create download URL for this segment
+                    name = os.path.splitext(file)[0]  # Remove .pt extension
+                    download_url = f"/download-segment/{name}"
+                    
+                    # Format timestamps for better readability
+                    created_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_ctime))
+                    modified_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(file_stat.st_mtime))
+                    
+                    files.append({
+                        "name": file,
+                        "size": file_stat.st_size,
+                        "size_mb": round(file_stat.st_size / (1024 * 1024), 2),
+                        "created": created_time,
+                        "modified": modified_time,
+                        "download_url": download_url
+                    })
+        
+        return jsonify({
+            "segments": files,
+            "count": len(files)
+        })
+    
+    except Exception as e:
+        print(f"Error listing segments: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/download-segment/<name>', methods=['GET'])
+def download_segment(name):
+    """
+    Download a specific segment file
+    """
+    try:
+        # For security, ensure the name doesn't contain path traversal attempts
+        if '..' in name or '/' in name or '\\' in name:
+            return jsonify({"error": "Invalid segment name"}), 400
+            
+        # Add .pt extension if not provided
+        if not name.endswith('.pt'):
+            name += '.pt'
+        
+        # Define possible locations where segments might be stored
+        segment_directories = [".", "segments"]
+        
+        # Try to find the file in all potential locations
+        segment_path = None
+        for segments_dir in segment_directories:
+            path = os.path.join(segments_dir, name)
+            if os.path.exists(path) and os.path.isfile(path):
+                segment_path = path
+                break
+        
+        # Check if file was found
+        if segment_path is None:
+            return jsonify({
+                "error": f"Segment file '{name}' not found", 
+                "locations_checked": segment_directories
+            }), 404
+            
+        return send_file(
+            segment_path,
+            mimetype='application/octet-stream',
+            as_attachment=True,
+            download_name=name
+        )
+    
+    except Exception as e:
+        print(f"Error downloading segment: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/upload-segment-file', methods=['POST'])
+def upload_file():
+    """
+    Uploads a segment (.pt) file directly
+    
+    Expects a multipart/form-data with:
+    - file: The .pt file to upload
+    - name: (optional) Custom name for the segment file
+    """
+    try:
+        start_time = time.time()
+        print("Processing upload_file request")
+        
+        # Get the uploaded file
+        file = request.files.get('file')
+        
+        # Validate file was provided
+        if not file or not file.filename:
+            return jsonify({
+                "error": "No segment file provided"
+            }), 400
+            
+        # Validate file extension
+        if not file.filename.endswith('.pt'):
+            return jsonify({
+                "error": "File must be a .pt file"
+            }), 400
+        
+        # Get custom name or use filename
+        name = request.form.get('name')
+        if not name:
+            # Use original filename but remove extension
+            name = os.path.splitext(file.filename)[0]
+            
+        # Ensure name is safe
+        name = ''.join(c for c in name if c.isalnum() or c in ['-', '_'])
+        
+        # Ensure segment directory exists
+        os.makedirs("segments", exist_ok=True)
+        
+        # Create file path with .pt extension
+        if not name.endswith('.pt'):
+            name += '.pt'
+            
+        file_path = os.path.join("segments", name)
+        
+        # Save the uploaded file
+        file.save(file_path)
+        
+        processing_time = time.time() - start_time
+        print(f"Uploaded segment file as: {file_path} in {processing_time:.2f} seconds")
+        
+        # Return success response
+        return jsonify({
+            "message": f"Successfully uploaded segment file as '{name}'",
+            "name": os.path.splitext(name)[0],
+            "file_path": file_path,
+            "processing_time": processing_time
+        }), 200
+        
+    except Exception as e:
+        print(f"Error in upload_file: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -208,24 +419,42 @@ def index():
     return jsonify({
         "name": "CSM Audio Generation API",
         "endpoints": {
-            "/upload_segment": {
+            "/upload-segment": {
                 "method": "POST",
                 "content_type": "multipart/form-data",
                 "description": "Upload audio files with transcripts",
                 "parameters": {
-                    "files": "Multiple audio files (field can be repeated)",
-                    "transcripts": "JSON string array of transcripts",
-                    "segment_name": "(optional) Name for the segment"
+                    "files": "Audio files (one or more)",
+                    "transcripts": "Transcript texts (one or more, must match number of files)",
+                    "name": "(optional) Name for the segment"
                 }
             },
-            "/generate_audio": {
+            "/upload-segment-file": {
+                "method": "POST",
+                "content_type": "multipart/form-data",
+                "description": "Upload a pre-trained segment file (.pt)",
+                "parameters": {
+                    "file": "The .pt file to upload",
+                    "name": "(optional) Custom name for the segment"
+                }
+            },
+            "/generate-audio": {
                 "method": "POST",
                 "content_type": "application/json",
                 "description": "Generate audio from text and stream directly without saving to disk",
                 "parameters": {
                     "text": "Text to generate audio from",
-                    "segment_name": "(optional) Name of the segment to use"
+                    "name": "(optional) Name of the segment to use",
+                    "format": "(optional) Audio format: wav or mp3"
                 }
+            },
+            "/list-segments": {
+                "method": "GET",
+                "description": "List all available segment files"
+            },
+            "/download-segment/<name>": {
+                "method": "GET",
+                "description": "Download a specific segment file"
             },
             "/health": {
                 "method": "GET",
