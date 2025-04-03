@@ -169,6 +169,41 @@ class Generator:
 
         return audio
 
+    def generate_batch(self, texts, segments_list):
+        """
+        Generate audio for multiple texts in parallel
+        
+        Args:
+            texts (list): List of texts to generate audio for
+            segments_list (list): List of segments for each text
+        
+        Returns:
+            list: List of generated audio tensors
+        """
+        batch_size = len(texts)
+        results = []
+        
+        # Process in smaller sub-batches if needed
+        sub_batch_size = 4  # Adjust based on GPU memory
+        
+        for i in range(0, batch_size, sub_batch_size):
+            sub_texts = texts[i:i + sub_batch_size]
+            sub_segments = segments_list[i:i + sub_batch_size]
+            
+            # Generate each sub-batch
+            for text, segments in zip(sub_texts, sub_segments):
+                audio = self.generate(
+                    text=text,
+                    speaker=1,  # Default speaker
+                    context=segments,
+                    max_audio_length_ms=90_000,
+                    temperature=0.9,
+                    topk=50
+                )
+                results.append(audio)
+        
+        return results
+
 
 def load_csm_1b(device: str = "cuda") -> Generator:
     local_path = f"{local_model_directory}/sesame/csm-1b"
