@@ -149,7 +149,7 @@ def generate_audio():
         if (audio_format.lower() == 'mp3'):
             # MP3 encoding (smaller file size but slightly more CPU usage)
             torchaudio.save(buffer, audio_tensor_cpu.unsqueeze(0), sample_rate=sample_rate, 
-                          format="mp3", compression=4)  # Compression 4 = 128kbps
+                          format="mp3")  # Remove compression parameter
             content_type = 'audio/mp3'
             filename = "generated_audio.mp3"
         else:
